@@ -2,20 +2,14 @@ package main
 
 import (
 	"bytes"
-	"crypto"
 	"crypto/tls"
+
 	//"encoding/json"
 	"fmt"
-	"github.com/gin-gonic/contrib/static"
-	"github.com/gin-gonic/gin"
-	"github.com/gin-gonic/gin/binding"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
 	"image"
 	_ "image/png"
 	"io"
 	"log"
-	"menteslibres.net/gosexy/checksum"
 	"mime"
 	"net/http"
 	"net/url"
@@ -24,82 +18,31 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+
+	"github.com/geekgonecrazy/uberContainer/models"
+	"github.com/geekgonecrazy/uberContainer/store"
+	"github.com/geekgonecrazy/uberContainer/store/boltdb"
+	"github.com/gin-gonic/contrib/static"
+	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
+	"gopkg.in/mgo.v2/bson"
 )
 
 var (
-	mgoSession         *mgo.Session
-	databaseName       = os.Getenv("DATABASE")
-	databaseHost       = os.Getenv("HOST")
-	databaseUser       = os.Getenv("USER")
-	databasePasswd     = os.Getenv("PASSWD")
 	containerDirectory = "/Volumes/Containers"
 )
 
-type Container struct {
-	Id       bson.ObjectId `bson:"_id" json:"container_id"`
-	Filename string        `bson:"filename" json:"filename"`
-	Empty    bool          `bson:"empty" json:"empty"`
-	FileHash string        `bson:"fileHash" json:"fileHash"`
-	MimeType string        `bson:"mimeType" json:"mimeType"`
-	Width    int           `bson:"width" json:"width"`
-	Height   int           `bson:"height" json:"height"`
-}
-
-func (c *Container) String() string {
-	oid := bson.ObjectId(c.Id)
-	return fmt.Sprintf(`<Container Id:"%s" Filename:"%s" Empty:"%s" FileHash:"%s"`, oid.String(), c.Filename, c.Empty, c.FileHash)
-}
-
-type CreateRequest struct {
-	Download_url string `json:"download_url,omitempty"`
-	Filename     string `json:"filename"`
-	Callback     string `json:"callback,omitempty"`
-}
-
-func getSession() *mgo.Session {
-	if mgoSession == nil {
-		var err error
-
-		dialInfo := &mgo.DialInfo{
-			Addrs:    []string{databaseHost},
-			Database: databaseName,
-			Username: databaseUser,
-			Password: databasePasswd,
-		}
-
-		mgoSession, err = mgo.DialWithInfo(dialInfo)
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	return mgoSession.Clone()
-}
+var _store store.Store
 
 func HomeHandler(c *gin.Context) {
 	c.String(200, "Hail Hydra!")
 }
 
-func getContainer(container_id string) (Container, error) {
-
-	session := getSession()
-	defer session.Close()
-
-	c := session.DB(databaseName).C("containers")
-
-	result := Container{}
-	err := c.Find(bson.M{"_id": bson.ObjectIdHex(container_id)}).One(&result)
-	if err != nil {
-		return Container{}, err
-	}
-
-	return result, nil
-}
-
 func getFileHash(container_id string, filename string) string {
-	sha1 := checksum.File(path.Join(containerDirectory, container_id, filename), crypto.SHA1)
-	log.Println(sha1)
-	return sha1
+	//sha1 := checksum.File(path.Join(containerDirectory, container_id, filename), crypto.SHA1)
+	//log.Println(sha1)
+
+	return "sha1"
 }
 
 func getImageDimension(imagePath string) (int, int) {
@@ -112,87 +55,9 @@ func getImageDimension(imagePath string) (int, int) {
 	if err != nil {
 		log.Println(err)
 	}
+
 	log.Println(image)
 	return image.Width, image.Height
-}
-
-func getNewContainerId() string {
-	container_id := bson.NewObjectId()
-	return container_id.Hex()
-}
-
-func createContainer(container_id string, filename string, empty bool, fileHash string, mimeType string) Container {
-	session := getSession()
-	defer session.Close()
-
-	c := session.DB(databaseName).C("containers")
-
-	var width, height = 0, 0
-
-	log.Println(path.Join(containerDirectory, container_id, filename))
-	if mimeType == "image/png" {
-		width, height = getImageDimension(path.Join(containerDirectory, container_id, filename))
-	}
-
-	newContainer := Container{
-		Id:       bson.ObjectIdHex(container_id),
-		Filename: filename,
-		Empty:    empty,
-		FileHash: fileHash,
-		MimeType: mimeType,
-		Width:    width,
-		Height:   height,
-	}
-
-	c.Insert(newContainer)
-
-	log.Println(container_id)
-
-	return newContainer
-}
-
-func updateContainer(container_id string, filename string, empty bool, fileHash string, mimeType string) Container {
-	session := getSession()
-	defer session.Close()
-
-	c := session.DB(databaseName).C("containers")
-
-	var width, height = 0, 0
-
-	if mimeType == "image/png" {
-		width, height = getImageDimension(path.Join(containerDirectory, container_id, filename))
-	}
-
-	change := Container{
-		Id:       bson.ObjectIdHex(container_id),
-		Filename: filename,
-		Empty:    empty,
-		FileHash: fileHash,
-		MimeType: mimeType,
-		Width:    width,
-		Height:   height,
-	}
-
-	query := bson.M{"_id": bson.ObjectIdHex(container_id)}
-
-	err := c.Update(query, change)
-	if err != nil {
-		panic(err)
-	}
-
-	return change
-}
-
-func deleteContainer(container_id string) {
-	session := getSession()
-	defer session.Close()
-
-	c := session.DB(databaseName).C("containers")
-
-	err := c.RemoveId(bson.ObjectIdHex(container_id))
-	if err != nil {
-		log.Println(err)
-	}
 }
 
 func downloadFile(container_id string, download_url string, filename string) {
@@ -291,7 +156,7 @@ func cleanThumbnails(container_id string) {
 
 func generateThumbnail(container_id string, size string) (string, error) {
 
-	container, err := getContainer(container_id)
+	container, err := _store.GetContainer(container_id)
 	if err != nil {
 		log.Println(err)
 	}
@@ -326,7 +191,7 @@ func generateThumbnail(container_id string, size string) (string, error) {
 func ContainerDownloadHandler(c *gin.Context) {
 	container_id := c.Params.ByName("container_id")
 
-	container, err := getContainer(container_id)
+	container, err := _store.GetContainer(container_id)
 	if err != nil {
 		log.Println(err)
 	}
@@ -355,7 +220,6 @@ func ContainerPreviewHandler(c *gin.Context) {
 	redirect_url := "/containers/" + container_id + "/preview/" + default_size
 
 	http.Redirect(c.Writer, c.Request, redirect_url, 302)
-
 }
 
 func ContainerThumbnailHandler(c *gin.Context) {
@@ -383,17 +247,13 @@ func ContainerThumbnailHandler(c *gin.Context) {
 func ContainerUpdateHandler(c *gin.Context) {
 	container_id := c.Params.ByName("container_id")
 
-	var form struct {
-		Download_url string `form:"download_url"`
-		Filename     string `form:filename`
-		Callback     string `form:callback`
-	}
+	form := models.ContainerCreateUpdatePayload{}
 
 	c.BindWith(&form, binding.Form)
 
 	cleanThumbnails(container_id)
 
-	container, err := getContainer(container_id)
+	container, err := _store.GetContainer(container_id)
 	if err != nil {
 		log.Println(err)
 	}
@@ -403,8 +263,8 @@ func ContainerUpdateHandler(c *gin.Context) {
 		log.Println(err)
 	}
 
-	if len(form.Download_url) > 0 {
-		downloadFile(container_id, form.Download_url, form.Filename)
+	if len(form.DownloadUrl) > 0 {
+		downloadFile(container_id, form.DownloadUrl, form.Filename)
 
 		fileHash := getFileHash(container_id, form.Filename)
 
@@ -412,7 +272,10 @@ func ContainerUpdateHandler(c *gin.Context) {
 		fileExt := filepath.Ext(filePath)
 		mimeType := mime.TypeByExtension(fileExt)
 
-		updateContainer(container_id, form.Filename, false, fileHash, mimeType)
+		container.MimeType = mimeType
+		container.FileHash = fileHash
+
+		_store.UpdateContainer(&container)
 	} else {
 
 		file, header, err := c.Request.FormFile("file")
@@ -446,7 +309,10 @@ func ContainerUpdateHandler(c *gin.Context) {
 		fileExt := filepath.Ext(filePath)
 		mimeType := mime.TypeByExtension(fileExt)
 
-		updateContainer(container_id, header.Filename, false, fileHash, mimeType)
+		container.FileHash = fileHash
+		container.MimeType = mimeType
+
+		_store.UpdateContainer(&container)
 	}
 
 	if len(form.Callback) > 0 {
@@ -465,7 +331,7 @@ func ContainerUpdateHandler(c *gin.Context) {
 func GetContainerHandler(c *gin.Context) {
 	container_id := c.Params.ByName("container_id")
 
-	container, err := getContainer(container_id)
+	container, err := _store.GetContainer(container_id)
 	if err != nil {
 		log.Println(err.Error())
 		if err.Error() == "not found" {
@@ -483,7 +349,7 @@ func GetContainerHandler(c *gin.Context) {
 func ContainerDeleteFileHandler(c *gin.Context) {
 	container_id := c.Params.ByName("container_id")
 
-	container, err := getContainer(container_id)
+	container, err := _store.GetContainer(container_id)
 	if err != nil {
 		log.Println(err)
 	}
@@ -497,7 +363,14 @@ func ContainerDeleteFileHandler(c *gin.Context) {
 
 	cleanThumbnails(container_id)
 
-	updateContainer(container_id, "", true, "", "")
+	container.Empty = true
+	container.FileHash = ""
+	container.MimeType = ""
+	container.Width = 0
+	container.Height = 0
+	container.Filename = ""
+
+	_store.UpdateContainer(&container)
 
 	c.JSON(200, gin.H{})
 }
@@ -505,38 +378,39 @@ func ContainerDeleteFileHandler(c *gin.Context) {
 func ContainerCreateHandler(c *gin.Context) {
 	log.Println("Creating New Container..")
 
-	var form struct {
-		Download_url string `json:"download_url"`
-		Filename     string `form:"filename" json:"filename"`
-		Callback     string `form:"callback" json:"callback"`
-		IdOnly       bool   `json:"id_only"`
-	}
+	container_id := bson.NewObjectId().Hex()
+
+	form := models.ContainerCreateUpdatePayload{}
 
 	c.Bind(&form)
 
 	fmt.Printf("%+v\n", form)
-	if form.IdOnly {
-		container_id := getNewContainerId()
-		container := createContainer(container_id, "", true, "", "")
+	if len(form.DownloadUrl) > 0 {
 
-		c.JSON(201, container)
-	} else if len(form.Download_url) > 0 {
-		container_id := getNewContainerId()
+		log.Println(form.DownloadUrl)
 
-		log.Println(form.Download_url)
+		downloadFile(form.ContainerKey, form.DownloadUrl, form.Filename)
 
-		downloadFile(container_id, form.Download_url, form.Filename)
+		fileHash := getFileHash(form.ContainerKey, form.Filename)
 
-		fileHash := getFileHash(container_id, form.Filename)
-
-		filePath := path.Join(containerDirectory, container_id, form.Filename)
+		filePath := path.Join(containerDirectory, form.ContainerKey, form.Filename)
 		fileExt := filepath.Ext(filePath)
 		mimeType := mime.TypeByExtension(fileExt)
 
-		container := createContainer(container_id, form.Filename, false, fileHash, mimeType)
+		container := models.Container{
+			Key:      form.ContainerKey,
+			Filename: form.Filename,
+			FileHash: fileHash,
+			Empty:    false,
+			MimeType: mimeType,
+			Height:   0,
+			Width:    0,
+		}
+
+		_store.CreateContainer(&container)
 
 		if len(form.Callback) > 0 {
-			resp, err := http.Post(form.Callback, "application/json", bytes.NewReader([]byte(`{"container_id": "`+container.Id+`"}`)))
+			resp, err := http.Post(form.Callback, "application/json", bytes.NewReader([]byte(`{"container_id": "`+container.Key+`"}`)))
 			defer resp.Body.Close()
 			if err != nil {
 				log.Println(err)
@@ -546,7 +420,7 @@ func ContainerCreateHandler(c *gin.Context) {
 		} else {
 			c.JSON(201, container)
 		}
-	} else if _, _, err := c.Request.FormFile("file"); err == nil {
+	} else {
 		log.Println("File upload")
 
 		file, header, err := c.Request.FormFile("file")
@@ -555,8 +429,6 @@ func ContainerCreateHandler(c *gin.Context) {
 		}
 
 		log.Println(header.Filename)
-
-		container_id := getNewContainerId()
 
 		err = os.Mkdir(path.Join(containerDirectory, container_id), 0777)
 		if err != nil {
@@ -583,7 +455,17 @@ func ContainerCreateHandler(c *gin.Context) {
 		fileExt := filepath.Ext(filePath)
 		mimeType := mime.TypeByExtension(fileExt)
 
-		container := createContainer(container_id, header.Filename, false, fileHash, mimeType)
+		container := models.Container{
+			Key:      form.ContainerKey,
+			Filename: header.Filename,
+			FileHash: fileHash,
+			Empty:    false,
+			MimeType: mimeType,
+			Height:   0,
+			Width:    0,
+		}
+
+		_store.CreateContainer(&container)
 
 		if len(form.Callback) > 0 {
 			log.Println("Callback: " + form.Callback)
@@ -593,11 +475,6 @@ func ContainerCreateHandler(c *gin.Context) {
 				log.Println(err)
 			}
 		}
-
-		c.JSON(201, container)
-	} else {
-		container_id := getNewContainerId()
-		container := createContainer(container_id, "", true, "", "")
 
 		c.JSON(201, container)
 	}
@@ -614,14 +491,36 @@ func ContainerDeleteHandler(c *gin.Context) {
 		log.Println(err)
 	}
 
-	deleteContainer(container_id)
+	_store.DeleteContainer(container_id)
 
 	c.String(200, "")
 }
 
+func TestHandler(c *gin.Context) {
+	key := c.Params.ByName("key")
+
+	log.Println("test", key)
+
+	c.String(201, key)
+}
+
 func main() {
 
-	log.Println(fmt.Sprintf(`Database:"%s"`, databaseName))
+	//connectionString := "mongodb://localhost:27017/uber"
+
+	/*mongoStore, err := mongo.New(connectionString)
+	if err != nil {
+		panic(err)
+	}
+
+	_store = mongoStore*/
+
+	boltStore, err := boltdb.New("./bolt.db")
+	if err != nil {
+		panic(err)
+	}
+
+	_store = boltStore
 
 	router := gin.New()
 
@@ -629,6 +528,8 @@ func main() {
 	router.Use(gin.Recovery())
 
 	api := router.Group("/api")
+
+	api.GET("/bob/*key", TestHandler)
 
 	containers := api.Group("/containers")
 
