@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/geekgonecrazy/uberContainer/core"
 	"github.com/geekgonecrazy/uberContainer/models"
@@ -12,62 +13,64 @@ import (
 )
 
 func GetContainersHandler(c *gin.Context) {
+	if valid := checkValidAuthentication("", c); !valid {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
 	containers, err := core.GetContainers()
 	if err != nil {
-
+		log.Println(err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
 	}
 
 	c.JSON(http.StatusOK, containers)
 }
 
 func ContainerDownloadHandler(c *gin.Context) {
-	container_id := c.Params.ByName("container_id")
+	containerKey := c.Params.ByName("container_key")
+	returnLink, _ := strconv.ParseBool(c.Query("r"))
 
-	fileLink, err := core.GetContainerFileLink(container_id)
+	if valid := checkValidAuthentication(containerKey, c); !valid {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	fileLink, err := core.GetContainerFileLink(containerKey)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 
-	c.Redirect(http.StatusTemporaryRedirect, fileLink)
+	if returnLink {
+		c.JSON(http.StatusOK, gin.H{"downloadLink": fileLink})
+	} else {
+		c.Redirect(http.StatusTemporaryRedirect, fileLink)
+	}
 }
 
 func ContainerPreviewHandler(c *gin.Context) {
-	container_id := c.Params.ByName("container_id")
+	containerKey := c.Params.ByName("container_key")
 
-	default_size := "900"
-
-	redirect_url := "/containers/" + container_id + "/preview/" + default_size
-
-	http.Redirect(c.Writer, c.Request, redirect_url, 302)
-}
-
-func ContainerThumbnailHandler(c *gin.Context) {
-	/*container_id := c.Params.ByName("container_id")
-	size := c.Params.ByName("size")
-
-	thumbPath, err := generateThumbnail(container_id, size)
+	previewLink, err := core.GetContainerPreviewLink(containerKey)
 	if err != nil {
-		log.Println(err)
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
 	}
 
-	c.Writer.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	c.Writer.Header().Set("Pragma", "no-cache")
-	c.Writer.Header().Set("Expires", "0")
-
-	_, err = os.Stat(thumbPath)
-	if err != nil {
-		log.Println(err)
-		c.String(404, "hello!")
-	} else {
-		http.ServeFile(c.Writer, c.Request, thumbPath)
-	}*/
+	c.Redirect(http.StatusTemporaryRedirect, previewLink)
 }
 
 func ContainerCreateHandler(c *gin.Context) {
 	form := models.ContainerCreateUpdatePayload{}
 
 	c.Bind(&form)
+
+	if valid := checkValidAuthentication(form.ContainerKey, c); !valid {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
 
 	container, _ := core.GetContainer(form.ContainerKey)
 	if container.Key != "" {
@@ -80,7 +83,8 @@ func ContainerCreateHandler(c *gin.Context) {
 
 		container, err := core.ContainerFileUploadFromUrl(form)
 		if err != nil {
-
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
 		}
 
 		c.JSON(201, container)
@@ -89,12 +93,14 @@ func ContainerCreateHandler(c *gin.Context) {
 
 		file, header, err := c.Request.FormFile("file")
 		if err != nil {
-			log.Println(err)
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
 		}
 
 		container, err := core.ContainerFileUploadFromForm(form, header, file)
 		if err != nil {
-			log.Fatalln(err)
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
 		}
 
 		c.JSON(201, container)
@@ -103,24 +109,32 @@ func ContainerCreateHandler(c *gin.Context) {
 }
 
 func ContainerUpdateHandler(c *gin.Context) {
-	container_id := c.Params.ByName("container_id")
+	containerKey := c.Params.ByName("container_key")
+
+	if valid := checkValidAuthentication(containerKey, c); !valid {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
 	form := models.ContainerCreateUpdatePayload{}
 
 	c.BindWith(&form, binding.Form)
 
 	fmt.Printf("%+v\n", form)
 
-	form.ContainerKey = container_id
+	form.ContainerKey = containerKey
 
-	if err := core.DeleteContainerFile(container_id); err != nil {
-
+	if err := core.DeleteContainerFile(containerKey); err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
 	}
 
 	if len(form.DownloadUrl) > 0 {
 
 		container, err := core.ContainerFileUploadFromUrl(form)
 		if err != nil {
-
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
 		}
 
 		c.JSON(201, container)
@@ -134,7 +148,8 @@ func ContainerUpdateHandler(c *gin.Context) {
 
 		container, err := core.ContainerFileUploadFromForm(form, header, file)
 		if err != nil {
-
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
 		}
 
 		c.JSON(201, container)
@@ -142,26 +157,62 @@ func ContainerUpdateHandler(c *gin.Context) {
 }
 
 func GetContainerHandler(c *gin.Context) {
-	container_id := c.Params.ByName("container_id")
+	containerKey := c.Params.ByName("container_key")
 
-	container, err := core.GetContainer(container_id)
+	if valid := checkValidAuthentication(containerKey, c); !valid {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	container, err := core.GetContainer(containerKey)
 	if err != nil {
 		log.Println(err.Error())
-		if err.Error() == "not found" {
+		if err.Error() == "record not found" {
 			c.JSON(404, gin.H{})
 		} else {
 			c.JSON(500, gin.H{})
 		}
 
-	} else {
-		c.JSON(200, container)
 	}
+
+	c.JSON(200, container)
+}
+
+func GetContainerMetaHandler(c *gin.Context) {
+	containerKey := c.Params.ByName("container_key")
+
+	if valid := checkValidAuthentication(containerKey, c); !valid {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	container, err := core.GetContainer(containerKey)
+	if err != nil {
+		log.Println(err.Error())
+		if err.Error() == "record not found" {
+			c.JSON(404, gin.H{})
+			return
+		} else {
+			c.JSON(500, gin.H{})
+			return
+		}
+	}
+
+	c.Writer.Header().Add("X-Uber-Container-Filename", container.Filename)
+	c.Writer.Header().Add("X-Uber-Container-Filesize", fmt.Sprintf("%d", container.FileSize))
+	c.Writer.Header().Add("Last-Modified", container.ModifiedAt.String())
+	c.AbortWithStatus(http.StatusNoContent)
 }
 
 func ContainerDeleteFileHandler(c *gin.Context) {
-	container_id := c.Params.ByName("container_id")
+	containerKey := c.Params.ByName("container_key")
 
-	if err := core.DeleteContainerFile(container_id); err != nil {
+	if valid := checkValidAuthentication(containerKey, c); !valid {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	if err := core.DeleteContainerFile(containerKey); err != nil {
 
 	}
 
@@ -169,9 +220,14 @@ func ContainerDeleteFileHandler(c *gin.Context) {
 }
 
 func ContainerDeleteHandler(c *gin.Context) {
-	container_id := c.Params.ByName("container_id")
+	containerKey := c.Params.ByName("container_key")
 
-	if err := core.DeleteContainer(container_id); err != nil {
+	if valid := checkValidAuthentication(containerKey, c); !valid {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	if err := core.DeleteContainer(containerKey); err != nil {
 
 	}
 

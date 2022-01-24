@@ -8,10 +8,12 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var _config *config
+var _config *Config
 
-type config struct {
-	S3 S3Config `yaml:"s3"`
+type Config struct {
+	S3         S3Config `yaml:"s3"`
+	SignSecret string   `yaml:"signSecret"`
+	AdminToken string   `yaml:"adminToken"`
 }
 
 type S3Config struct {
@@ -26,7 +28,7 @@ type S3Config struct {
 
 // Load tries to load the config file
 func Load(filePath string) error {
-	_config = new(config)
+	_config = new(Config)
 
 	yamlFile, err := ioutil.ReadFile(filePath)
 	if err != nil {
@@ -43,7 +45,7 @@ func Load(filePath string) error {
 }
 
 // Get returns the config file
-func Get() (*config, error) {
+func Get() (*Config, error) {
 	if _config == nil {
 		return nil, errors.New("no config loaded")
 	}

@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/geekgonecrazy/uberContainer/models"
 )
@@ -41,10 +42,23 @@ func GetContainerFileLink(container_id string) (string, error) {
 	return _storage.GetDownloadLink(fmt.Sprintf("%s/%s", container.Key, container.Filename))
 }
 
+func GetContainerPreviewLink(container_id string) (string, error) {
+	container, err := GetContainer(container_id)
+	if err != nil {
+		return "", err
+	}
+
+	return _storage.GetDownloadLink(fmt.Sprintf("%s/preview.png", container.Key))
+}
+
 func ContainerFileUploadFromForm(form models.ContainerCreateUpdatePayload, fileHeader *multipart.FileHeader, file io.Reader) (*models.Container, error) {
 
 	fileExt := filepath.Ext(fileHeader.Filename)
 	mimeType := mime.TypeByExtension(fileExt)
+
+	if !strings.HasPrefix(form.ContainerKey, "/") {
+		form.ContainerKey = "/" + form.ContainerKey
+	}
 
 	container := models.Container{
 		Key:      form.ContainerKey,
@@ -91,7 +105,7 @@ func ContainerFileUploadFromUrl(form models.ContainerCreateUpdatePayload) (*mode
 
 	fileHash := getFileHash(form.ContainerKey, form.Filename)
 
-	filePath := path.Join(containerDirectory, form.ContainerKey, form.Filename)
+	filePath := path.Join(previewTempDirectory, form.ContainerKey, form.Filename)
 	fileExt := filepath.Ext(filePath)
 	mimeType := mime.TypeByExtension(fileExt)
 
@@ -234,8 +248,8 @@ func generateThumbnail(container_id string, file io.Reader, size string) error {
 		log.Println(err)
 	}
 
-	thumbPath := path.Join(containerDirectory, "", "preview.png")
-	filePath := path.Join(containerDirectory, "", container.Filename)
+	thumbPath := path.Join(previewTempDirectory, "", "preview.png")
+	filePath := path.Join(previewTempDirectory, "", container.Filename)
 
 	out, err := os.Create(filePath)
 	defer out.Close()
