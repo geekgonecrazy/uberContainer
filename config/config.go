@@ -11,9 +11,16 @@ import (
 var _config *Config
 
 type Config struct {
-	S3         S3Config `yaml:"s3"`
-	SignSecret string   `yaml:"signSecret"`
-	AdminToken string   `yaml:"adminToken"`
+	Database   DatabaseConfig `yaml:"database"`
+	S3         S3Config       `yaml:"s3"`
+	SignSecret string         `yaml:"signSecret"`
+	AdminToken string         `yaml:"adminToken"`
+}
+
+type DatabaseConfig struct {
+	Type             string `yaml:"type"`
+	ConnectionString string `yaml:"connectionString"`
+	BoltPath         string `yaml:"boltPath"`
 }
 
 type S3Config struct {
