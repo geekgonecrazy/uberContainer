@@ -3,7 +3,7 @@ package store
 import (
 	"errors"
 
-	"github.com/geekgonecrazy/uberContainer/models"
+	"github.com/FideTechSolutions/uberContainer/models"
 )
 
 //Store is an interface that the store should implement

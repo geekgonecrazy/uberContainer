@@ -1,17 +1,20 @@
 package controllers
 
 import (
+	"log"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/geekgonecrazy/uberContainer/core"
+	"github.com/FideTechSolutions/uberContainer/core"
 	"github.com/gin-gonic/gin"
 )
 
 func isSignatureValid(containerKey string, c *gin.Context) bool {
 	signature := c.GetHeader("X-Uber-Signature")
 	exprHeader := c.GetHeader("X-Uber-Signature-Expire")
+
+	log.Println(containerKey, signature, exprHeader)
 
 	if signature == "" {
 		return false

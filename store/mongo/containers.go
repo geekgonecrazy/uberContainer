@@ -1,7 +1,11 @@
 package mongo
 
 import (
-	"github.com/geekgonecrazy/uberContainer/models"
+	"time"
+
+	"github.com/FideTechSolutions/uberContainer/models"
+	"github.com/FideTechSolutions/uberContainer/store"
+	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
 
@@ -29,8 +33,12 @@ func (m *mongoStore) GetContainer(key string) (models.Container, error) {
 	c := session.DB(m.DatabaseName).C("containers")
 
 	result := models.Container{}
-	err := c.Find(bson.M{"_id": key}).One(&result)
+	err := c.Find(bson.M{"key": key}).One(&result)
 	if err != nil {
+		if err == mgo.ErrNotFound {
+			return models.Container{}, store.ErrNotFound
+		}
+
 		return models.Container{}, err
 	}
 
@@ -42,6 +50,9 @@ func (m *mongoStore) CreateContainer(container *models.Container) error {
 	defer session.Close()
 
 	c := session.DB(m.DatabaseName).C("containers")
+
+	container.CreatedAt = time.Now()
+	container.ModifiedAt = time.Now()
 
 	if err := c.Insert(container); err != nil {
 		return err
@@ -56,7 +67,9 @@ func (m *mongoStore) UpdateContainer(container *models.Container) error {
 
 	c := session.DB(m.DatabaseName).C("containers")
 
-	query := bson.M{"_id": container.Key}
+	container.ModifiedAt = time.Now()
+
+	query := bson.M{"key": container.Key}
 
 	err := c.Update(query, bson.M{
 		"$set": container,
@@ -75,7 +88,7 @@ func (m *mongoStore) DeleteContainer(key string) error {
 
 	c := session.DB(m.DatabaseName).C("containers")
 
-	err := c.RemoveId(key)
+	err := c.Remove(bson.M{"key": key})
 	if err != nil {
 		return err
 	}

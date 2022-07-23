@@ -3,9 +3,9 @@ package main
 import (
 	"flag"
 
-	"github.com/geekgonecrazy/uberContainer/config"
-	"github.com/geekgonecrazy/uberContainer/core"
-	"github.com/geekgonecrazy/uberContainer/router"
+	"github.com/FideTechSolutions/uberContainer/config"
+	"github.com/FideTechSolutions/uberContainer/core"
+	"github.com/FideTechSolutions/uberContainer/router"
 )
 
 func main() {

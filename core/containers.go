@@ -17,7 +17,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/geekgonecrazy/uberContainer/models"
+	"github.com/FideTechSolutions/uberContainer/models"
+	"github.com/FideTechSolutions/uberContainer/store"
 )
 
 func GetContainer(container_id string) (models.Container, error) {
@@ -51,8 +52,7 @@ func GetContainerPreviewLink(container_id string) (string, error) {
 	return _storage.GetDownloadLink(fmt.Sprintf("%s/preview.png", container.Key))
 }
 
-func ContainerFileUploadFromForm(form models.ContainerCreateUpdatePayload, fileHeader *multipart.FileHeader, file io.Reader) (*models.Container, error) {
-
+func CreateContainerFromFileUploadFromForm(form models.ContainerCreateUpdatePayload, fileHeader *multipart.FileHeader, file io.Reader) (*models.Container, error) {
 	fileExt := filepath.Ext(fileHeader.Filename)
 	mimeType := mime.TypeByExtension(fileExt)
 
@@ -98,7 +98,7 @@ func ContainerFileUploadFromForm(form models.ContainerCreateUpdatePayload, fileH
 	return nil, nil
 }
 
-func ContainerFileUploadFromUrl(form models.ContainerCreateUpdatePayload) (*models.Container, error) {
+func CreateContainerFromFileUploadFromUrl(form models.ContainerCreateUpdatePayload) (*models.Container, error) {
 	log.Println(form.DownloadUrl)
 
 	downloadFile(form.ContainerKey, form.DownloadUrl, form.Filename)
@@ -153,10 +153,120 @@ func ContainerFileUploadFromUrl(form models.ContainerCreateUpdatePayload) (*mode
 	return &container, nil
 }
 
+func UpdateContainerFromFileUploadFromForm(form models.ContainerCreateUpdatePayload, fileHeader *multipart.FileHeader, file io.Reader) (*models.Container, error) {
+	container, err := GetContainer(form.ContainerKey)
+	if err != nil {
+		return nil, err
+	}
+
+	fileExt := filepath.Ext(fileHeader.Filename)
+	mimeType := mime.TypeByExtension(fileExt)
+
+	if !strings.HasPrefix(form.ContainerKey, "/") {
+		form.ContainerKey = "/" + form.ContainerKey
+	}
+
+	container.Filename = fileHeader.Filename
+	container.FileSize = fileHeader.Size
+	//container.FileHash = fileHash
+	container.Empty = false
+	container.MimeType = mimeType
+	container.Height = 0
+	container.Width = 0
+
+	log.Println(container)
+
+	width, height := getImageDimension(file)
+	container.Width = width
+	container.Height = height
+
+	if err := _storage.UploadFromReader(fmt.Sprintf("%s/%s", container.Key, container.Filename), container.MimeType, file, container.FileSize); err != nil {
+		return nil, err
+	}
+
+	if err := _store.UpdateContainer(&container); err != nil {
+		return nil, err
+	}
+
+	if err := generateThumbnail(container.Key, file, "250"); err != nil {
+		return nil, err
+	}
+
+	if len(form.Callback) > 0 {
+		if err := uploadCallback(&container, form.Callback); err != nil {
+			return &container, err
+		}
+	}
+
+	return nil, nil
+}
+
+func UpdateContainerFromFileUploadFromUrl(form models.ContainerCreateUpdatePayload) (*models.Container, error) {
+	container, err := GetContainer(form.ContainerKey)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Println(form.DownloadUrl)
+
+	downloadFile(form.ContainerKey, form.DownloadUrl, form.Filename)
+
+	fileHash := getFileHash(form.ContainerKey, form.Filename)
+
+	filePath := path.Join(previewTempDirectory, form.ContainerKey, form.Filename)
+	fileExt := filepath.Ext(filePath)
+	mimeType := mime.TypeByExtension(fileExt)
+
+	container.Filename = form.Filename
+	container.FileSize = 0
+	container.FileHash = fileHash
+	container.Empty = false
+	container.MimeType = mimeType
+	container.Height = 0
+	container.Width = 0
+
+	file, fileSize, err := downloadFile(form.ContainerKey, form.DownloadUrl, form.Filename)
+	if err != nil {
+
+	}
+
+	defer file.Close()
+
+	container.FileSize = fileSize
+
+	width, height := getImageDimension(file)
+	container.Width = width
+	container.Height = height
+
+	if err := _storage.UploadFromReader(fmt.Sprintf("%s/%s", container.Key, container.Filename), container.MimeType, file, container.FileSize); err != nil {
+		return nil, err
+	}
+
+	if err := _store.UpdateContainer(&container); err != nil {
+		return nil, err
+	}
+
+	if err := generateThumbnail(container.Key, file, "250"); err != nil {
+		return nil, err
+	}
+
+	if len(form.Callback) > 0 {
+		if err := uploadCallback(&container, form.Callback); err != nil {
+			return &container, err
+		}
+	}
+
+	return &container, nil
+}
+
 func DeleteContainerFile(container_id string) error {
 	container, err := GetContainer(container_id)
-	if err != nil {
+	if err != nil && err != store.ErrNotFound {
 		return err
+	}
+
+	if err == store.ErrNotFound {
+		return nil
 	}
 
 	_storage.Delete(fmt.Sprintf("%s/%s", container.Key, container.Filename))
@@ -242,14 +352,16 @@ func downloadFile(container_id string, download_url string, filename string) (io
 	return resp.Body, resp.ContentLength, nil
 }
 
-func generateThumbnail(container_id string, file io.Reader, size string) error {
-	container, err := _store.GetContainer(container_id)
+func generateThumbnail(container_key string, file io.Reader, size string) error {
+	container, err := _store.GetContainer(container_key)
 	if err != nil {
 		log.Println(err)
 	}
 
-	thumbPath := path.Join(previewTempDirectory, "", "preview.png")
-	filePath := path.Join(previewTempDirectory, "", container.Filename)
+	containerFilePrefix := strings.ReplaceAll(container_key, "/", "-")
+
+	thumbPath := path.Join(previewTempDirectory, fmt.Sprintf("%s-preview.png", containerFilePrefix))
+	filePath := path.Join(previewTempDirectory, fmt.Sprintf("%s-%s", containerFilePrefix, container.Filename))
 
 	out, err := os.Create(filePath)
 	defer out.Close()
@@ -261,7 +373,7 @@ func generateThumbnail(container_id string, file io.Reader, size string) error {
 		return err
 	}
 
-	log.Println(" Thumbnail has been requested for container: " + container_id)
+	log.Println(" Thumbnail has been requested for container: " + container_key)
 
 	_, err = os.Stat(thumbPath)
 	if err != nil {
@@ -273,7 +385,7 @@ func generateThumbnail(container_id string, file io.Reader, size string) error {
 			filePath += "[0]"
 		}
 
-		_, err := exec.Command("/usr/local/bin/convert", filePath, "-thumbnail", size+"x"+size, thumbPath).Output()
+		_, err := exec.Command("/usr/bin/convert", filePath, "-thumbnail", size+"x"+size, thumbPath).Output()
 		if err != nil {
 			log.Println("Failed to generate preview", err)
 			return nil

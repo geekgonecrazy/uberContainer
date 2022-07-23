@@ -3,7 +3,7 @@ package boltdb
 import (
 	"time"
 
-	"github.com/geekgonecrazy/uberContainer/store"
+	"github.com/FideTechSolutions/uberContainer/store"
 	bolt "go.etcd.io/bbolt"
 )
 

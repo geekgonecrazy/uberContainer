@@ -1,13 +1,17 @@
 package core
 
 import (
+	"image"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
 	"os"
 
-	"github.com/geekgonecrazy/uberContainer/config"
-	"github.com/geekgonecrazy/uberContainer/core/s3"
-	"github.com/geekgonecrazy/uberContainer/store"
-	"github.com/geekgonecrazy/uberContainer/store/boltdb"
-	"github.com/geekgonecrazy/uberContainer/store/mongo"
+	"github.com/FideTechSolutions/uberContainer/config"
+	"github.com/FideTechSolutions/uberContainer/core/s3"
+	"github.com/FideTechSolutions/uberContainer/store"
+	"github.com/FideTechSolutions/uberContainer/store/boltdb"
+	"github.com/FideTechSolutions/uberContainer/store/mongo"
 )
 
 var _store store.Store
@@ -25,6 +29,11 @@ func Init() {
 	}
 
 	_config = conf
+
+	// If not added the image detection will always show unknown format
+	image.RegisterFormat("jpeg", "jpeg", jpeg.Decode, jpeg.DecodeConfig)
+	image.RegisterFormat("gif", "gif", gif.Decode, gif.DecodeConfig)
+	image.RegisterFormat("png", "png", png.Decode, png.DecodeConfig)
 
 	switch conf.Database.Type {
 	case "mongo":
@@ -58,7 +67,12 @@ func Init() {
 	}
 
 	if _, err := os.Stat(previewTempDirectory); err != nil {
-		panic("Please make sure to set valid temp directory")
+		if os.IsNotExist(err) {
+			errDir := os.MkdirAll(previewTempDirectory, 0755)
+			if errDir != nil {
+				panic(err)
+			}
+		}
 	}
 
 	_storage = s3.NewClient(conf.S3)

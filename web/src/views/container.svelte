@@ -168,7 +168,7 @@
                 <div>Filename: {containerInfo.filename}</div>
 
                 {#if containerInfo.previewGenerated}
-                    <img class="preview-image" src="/api/previews{containerInfo.key}?i={previewCacheBust}" style="text-align: center;margin: 0 auto;display: table-cell;max-width:500px;cursor:pointer;" />
+                    <img class="preview-image" src="/api/previews{containerInfo.key}?i={previewCacheBust}" style="text-align: center;margin: 0 auto;display: table-cell;max-width:100px;cursor:pointer;" />
                 {:else}
                     <div ng-if="errorLoading" style="text-align:center;">Unable to preview</div>
                 {/if}

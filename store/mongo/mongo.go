@@ -1,7 +1,7 @@
 package mongo
 
 import (
-	"github.com/geekgonecrazy/uberContainer/store"
+	"github.com/FideTechSolutions/uberContainer/store"
 	"gopkg.in/mgo.v2"
 )
 
@@ -17,6 +17,8 @@ func New(host string) (store.Store, error) {
 	}
 
 	s := &mongoStore{dbName, sess}
+
+	s.EnsureIndexes()
 
 	return s, nil
 }
@@ -41,6 +43,18 @@ func (m *mongoStore) CheckDb() error {
 	defer sess.Close()
 
 	if err := sess.Ping(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// EnsureIndexes ensures the indexes are in place
+func (m *mongoStore) EnsureIndexes() error {
+	sess := m.Session.Copy()
+	defer sess.Close()
+
+	if err := sess.DB(m.DatabaseName).C("containers").EnsureIndex(mgo.Index{Key: []string{"key"}, Unique: true}); err != nil {
 		return err
 	}
 

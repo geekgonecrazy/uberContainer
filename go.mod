@@ -1,4 +1,4 @@
-module github.com/geekgonecrazy/uberContainer
+module github.com/FideTechSolutions/uberContainer
 
 go 1.17
 

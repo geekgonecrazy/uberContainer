@@ -1,8 +1,8 @@
 package router
 
 import (
-	"github.com/geekgonecrazy/uberContainer/controllers"
-	m "github.com/geekgonecrazy/uberContainer/router/middleware"
+	"github.com/FideTechSolutions/uberContainer/controllers"
+	m "github.com/FideTechSolutions/uberContainer/router/middleware"
 	"github.com/gin-gonic/contrib/static"
 	"github.com/gin-gonic/gin"
 )

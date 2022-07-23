@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/geekgonecrazy/uberContainer/config"
+	"github.com/FideTechSolutions/uberContainer/config"
 	minio "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
@@ -34,6 +34,8 @@ func (s *S3Client) Download(file string) (io.Reader, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	file = strings.TrimPrefix(file, "/")
 
 	object, err := minioClient.GetObject(
 		context.Background(),
@@ -60,6 +62,8 @@ func (s *S3Client) GetDownloadLink(file string) (string, error) {
 		return "", err
 	}
 
+	file = strings.TrimPrefix(file, "/")
+
 	url, err := minioClient.PresignedGetObject(context.Background(), s.Bucket, file, expire, make(url.Values))
 	if err != nil {
 		return "", err
@@ -78,6 +82,8 @@ func (s *S3Client) Upload(objectPath string, filePath string, contentType string
 	if err != nil {
 		return err
 	}
+
+	objectPath = strings.TrimPrefix(objectPath, "/")
 
 	_, err = minioClient.FPutObject(
 		context.Background(),
@@ -108,6 +114,8 @@ func (s *S3Client) UploadFromReader(objectPath string, contentType string, file 
 		return err
 	}
 
+	objectPath = strings.TrimPrefix(objectPath, "/")
+
 	_, err = minioClient.PutObject(context.Background(), s.Bucket, objectPath, file, fileSize, minio.PutObjectOptions{
 		ContentType: contentType,
 	})
@@ -130,6 +138,8 @@ func (s *S3Client) Delete(file string) error {
 	if err != nil {
 		return err
 	}
+
+	file = strings.TrimPrefix(file, "/")
 
 	// removes the bucket name from the Path if it exists
 	objectPrefix := strings.TrimPrefix(file, s.Bucket)

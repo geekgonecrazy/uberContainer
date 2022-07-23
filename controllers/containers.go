@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/geekgonecrazy/uberContainer/core"
-	"github.com/geekgonecrazy/uberContainer/models"
+	"github.com/FideTechSolutions/uberContainer/core"
+	"github.com/FideTechSolutions/uberContainer/models"
+	"github.com/FideTechSolutions/uberContainer/store"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 )
@@ -81,7 +82,7 @@ func ContainerCreateHandler(c *gin.Context) {
 	fmt.Printf("%+v\n", form)
 	if len(form.DownloadUrl) > 0 {
 
-		container, err := core.ContainerFileUploadFromUrl(form)
+		container, err := core.CreateContainerFromFileUploadFromUrl(form)
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
@@ -97,7 +98,7 @@ func ContainerCreateHandler(c *gin.Context) {
 			return
 		}
 
-		container, err := core.ContainerFileUploadFromForm(form, header, file)
+		container, err := core.CreateContainerFromFileUploadFromForm(form, header, file)
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
@@ -118,20 +119,18 @@ func ContainerUpdateHandler(c *gin.Context) {
 
 	form := models.ContainerCreateUpdatePayload{}
 
-	c.BindWith(&form, binding.Form)
+	if err := c.ShouldBindWith(&form, binding.Form); err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
 
 	fmt.Printf("%+v\n", form)
 
 	form.ContainerKey = containerKey
 
-	if err := core.DeleteContainerFile(containerKey); err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-
 	if len(form.DownloadUrl) > 0 {
 
-		container, err := core.ContainerFileUploadFromUrl(form)
+		container, err := core.UpdateContainerFromFileUploadFromUrl(form)
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
@@ -146,7 +145,7 @@ func ContainerUpdateHandler(c *gin.Context) {
 			log.Println(err)
 		}
 
-		container, err := core.ContainerFileUploadFromForm(form, header, file)
+		container, err := core.UpdateContainerFromFileUploadFromForm(form, header, file)
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
@@ -167,10 +166,12 @@ func GetContainerHandler(c *gin.Context) {
 	container, err := core.GetContainer(containerKey)
 	if err != nil {
 		log.Println(err.Error())
-		if err.Error() == "record not found" {
+		if err == store.ErrNotFound {
 			c.JSON(404, gin.H{})
+			return
 		} else {
 			c.JSON(500, gin.H{})
+			return
 		}
 
 	}
@@ -189,7 +190,7 @@ func GetContainerMetaHandler(c *gin.Context) {
 	container, err := core.GetContainer(containerKey)
 	if err != nil {
 		log.Println(err.Error())
-		if err.Error() == "record not found" {
+		if err == store.ErrNotFound {
 			c.JSON(404, gin.H{})
 			return
 		} else {

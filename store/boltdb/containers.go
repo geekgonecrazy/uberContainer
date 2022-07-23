@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/geekgonecrazy/uberContainer/models"
-	"github.com/geekgonecrazy/uberContainer/store"
+	"github.com/FideTechSolutions/uberContainer/models"
+	"github.com/FideTechSolutions/uberContainer/store"
 	bolt "go.etcd.io/bbolt"
 )
 

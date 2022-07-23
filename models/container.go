@@ -14,6 +14,6 @@ type Container struct {
 
 	PreviewGenerated bool `bson:"previewGenerated" json:"previewGenerated"`
 
-	CreatedAt  time.Time `bson:"createdAt"`
-	ModifiedAt time.Time `bson:"modifiedAt"`
+	CreatedAt  time.Time `bson:"createdAt" json:"createdAt"`
+	ModifiedAt time.Time `bson:"modifiedAt" json:"modifiedAt"`
 }
