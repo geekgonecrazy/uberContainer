@@ -62,6 +62,10 @@
             },
         });
 
+        if (res.status == 401) {
+            accessDenied = true;
+        }
+
         getContainerInfo();
     }
 
