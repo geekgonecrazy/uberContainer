@@ -18,6 +18,8 @@
         previewGenerated: false,
     };
 
+    let accessDenied = false;
+
     let previewCacheBust = 'default';
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -32,6 +34,10 @@
                 'X-Uber-Signature-Expire': expiration
             }
         });
+
+        if (res.status == 401) {
+            accessDenied = true;
+        }
 
         if (res.status === 200) {
             containerInfo = await res.json();
@@ -127,6 +133,10 @@
             }
         });
 
+        if (res.status == 401) {
+            accessDenied = true;
+        }
+
         if (res.status === 200) {
             const result = await res.json();
 
@@ -157,6 +167,14 @@
 		    <img src="/images/ajax-loader.gif" />
         {/if}
 
+        {#if accessDenied}
+        <div class="accessDenied">
+            <h3 style="color:red;">Access Denied<h3>
+
+            <div>Invalid or expired signature.</div>
+            <div>If embeded coming back to this page might be necessary</div>
+        </div>
+        {:else}
         <div class="dropzone" use:filedrop={options} on:filedrop={drop}>
             {#if containerInfo.empty}
             <div class="emptyContainer">
@@ -174,6 +192,7 @@
                 {/if}
             {/if}
         </div>
+        {/if}
 
         {#if !containerInfo.empty}
         <div class="btn-group">
