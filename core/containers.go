@@ -73,19 +73,11 @@ func CreateContainerFromFileUploadFromForm(form models.ContainerCreateUpdatePayl
 
 	log.Println(container)
 
-	width, height := getImageDimension(file)
-	container.Width = width
-	container.Height = height
-
-	if err := _storage.UploadFromReader(fmt.Sprintf("%s/%s", container.Key, container.Filename), container.MimeType, file, container.FileSize); err != nil {
-		return nil, err
-	}
-
 	if err := _store.CreateContainer(&container); err != nil {
 		return nil, err
 	}
 
-	if err := generateThumbnail(container.Key, file, "250"); err != nil {
+	if err := uploadAndGenerateThumbnail(container.Key, file, "250", mimeType); err != nil {
 		return nil, err
 	}
 
@@ -121,26 +113,18 @@ func CreateContainerFromFileUploadFromUrl(form models.ContainerCreateUpdatePaylo
 
 	file, fileSize, err := downloadFile(form.ContainerKey, form.DownloadUrl, form.Filename)
 	if err != nil {
-
+		return nil, err
 	}
 
 	defer file.Close()
 
 	container.FileSize = fileSize
 
-	width, height := getImageDimension(file)
-	container.Width = width
-	container.Height = height
-
-	if err := _storage.UploadFromReader(fmt.Sprintf("%s/%s", container.Key, container.Filename), container.MimeType, file, container.FileSize); err != nil {
-		return nil, err
-	}
-
 	if err := _store.CreateContainer(&container); err != nil {
 		return nil, err
 	}
 
-	if err := generateThumbnail(container.Key, file, "250"); err != nil {
+	if err := uploadAndGenerateThumbnail(container.Key, file, "250", mimeType); err != nil {
 		return nil, err
 	}
 
@@ -176,19 +160,11 @@ func UpdateContainerFromFileUploadFromForm(form models.ContainerCreateUpdatePayl
 
 	log.Println(container)
 
-	width, height := getImageDimension(file)
-	container.Width = width
-	container.Height = height
-
-	if err := _storage.UploadFromReader(fmt.Sprintf("%s/%s", container.Key, container.Filename), container.MimeType, file, container.FileSize); err != nil {
-		return nil, err
-	}
-
 	if err := _store.UpdateContainer(&container); err != nil {
 		return nil, err
 	}
 
-	if err := generateThumbnail(container.Key, file, "250"); err != nil {
+	if err := uploadAndGenerateThumbnail(container.Key, file, "250", mimeType); err != nil {
 		return nil, err
 	}
 
@@ -227,26 +203,18 @@ func UpdateContainerFromFileUploadFromUrl(form models.ContainerCreateUpdatePaylo
 
 	file, fileSize, err := downloadFile(form.ContainerKey, form.DownloadUrl, form.Filename)
 	if err != nil {
-
+		return nil, err
 	}
 
 	defer file.Close()
 
 	container.FileSize = fileSize
 
-	width, height := getImageDimension(file)
-	container.Width = width
-	container.Height = height
-
-	if err := _storage.UploadFromReader(fmt.Sprintf("%s/%s", container.Key, container.Filename), container.MimeType, file, container.FileSize); err != nil {
-		return nil, err
-	}
-
 	if err := _store.UpdateContainer(&container); err != nil {
 		return nil, err
 	}
 
-	if err := generateThumbnail(container.Key, file, "250"); err != nil {
+	if err := uploadAndGenerateThumbnail(container.Key, file, "250", mimeType); err != nil {
 		return nil, err
 	}
 
@@ -312,7 +280,12 @@ func getFileHash(container_id string, filename string) string {
 	return "sha1"
 }
 
-func getImageDimension(file io.Reader) (int, int) {
+func getImageDimension(filePath string) (int, int) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return 0, 0
+	}
+
 	image, _, err := image.DecodeConfig(file)
 	if err != nil {
 		log.Println(err)
@@ -352,7 +325,7 @@ func downloadFile(container_id string, download_url string, filename string) (io
 	return resp.Body, resp.ContentLength, nil
 }
 
-func generateThumbnail(container_key string, file io.Reader, size string) error {
+func uploadAndGenerateThumbnail(container_key string, file io.Reader, size string, mimeType string) error {
 	container, err := _store.GetContainer(container_key)
 	if err != nil {
 		log.Println(err)
@@ -395,9 +368,17 @@ func generateThumbnail(container_key string, file io.Reader, size string) error 
 			return nil
 		}
 
+		if err := _storage.Upload(fmt.Sprintf("%s/%s", container.Key, container.Filename), filePath, mimeType); err != nil {
+			return err
+		}
+
 		if err := _storage.Upload(fmt.Sprintf("%s/preview.png", container.Key), thumbPath, "image/png"); err != nil {
 			return err
 		}
+
+		width, height := getImageDimension(filePath)
+		container.Width = width
+		container.Height = height
 
 		container.PreviewGenerated = true
 
