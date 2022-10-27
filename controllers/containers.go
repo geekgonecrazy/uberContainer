@@ -66,7 +66,10 @@ func ContainerPreviewHandler(c *gin.Context) {
 func ContainerCreateHandler(c *gin.Context) {
 	form := models.ContainerCreateUpdatePayload{}
 
-	c.Bind(&form)
+	if err := c.ShouldBindWith(&form, binding.Form); err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
 
 	if valid := checkValidAuthentication(form.ContainerKey, c); !valid {
 		c.AbortWithStatus(http.StatusUnauthorized)
