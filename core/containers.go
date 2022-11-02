@@ -358,29 +358,37 @@ func uploadAndGenerateThumbnail(container_key string, file io.Reader, size strin
 			filePath += "[0]"
 		}
 
-		_, err := exec.Command("/usr/bin/convert", filePath, "-thumbnail", size+"x"+size, thumbPath).Output()
-		if err != nil {
-			log.Println("Failed to generate preview", err)
-			return nil
-		}
+		skipPreview := false
 
-		if _, err := os.Stat(thumbPath); err != nil {
-			return nil
+		if fileExt == ".zip" {
+			skipPreview = true
 		}
 
 		if err := _storage.Upload(fmt.Sprintf("%s/%s", container.Key, container.Filename), filePath, mimeType); err != nil {
 			return err
 		}
 
-		if err := _storage.Upload(fmt.Sprintf("%s/preview.png", container.Key), thumbPath, "image/png"); err != nil {
-			return err
+		if !skipPreview {
+			_, err := exec.Command("/usr/bin/convert", filePath, "-thumbnail", size+"x"+size, thumbPath).Output()
+			if err != nil {
+				log.Println("Failed to generate preview", err)
+				return nil
+			}
+
+			if _, err := os.Stat(thumbPath); err != nil {
+				return nil
+			}
+
+			if err := _storage.Upload(fmt.Sprintf("%s/preview.png", container.Key), thumbPath, "image/png"); err != nil {
+				return err
+			}
+
+			container.PreviewGenerated = true
 		}
 
 		width, height := getImageDimension(filePath)
 		container.Width = width
 		container.Height = height
-
-		container.PreviewGenerated = true
 
 		if err := _store.UpdateContainer(&container); err != nil {
 			return err
