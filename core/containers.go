@@ -77,7 +77,11 @@ func CreateContainerFromFileUploadFromForm(form models.ContainerCreateUpdatePayl
 		return nil, err
 	}
 
-	if err := uploadAndGenerateThumbnail(container.Key, file, "250", mimeType); err != nil {
+	if err := uploadAndGenerateThumbnail(&container, file, "250", mimeType); err != nil {
+		return nil, err
+	}
+
+	if err := _store.UpdateContainer(&container); err != nil {
 		return nil, err
 	}
 
@@ -124,7 +128,11 @@ func CreateContainerFromFileUploadFromUrl(form models.ContainerCreateUpdatePaylo
 		return nil, err
 	}
 
-	if err := uploadAndGenerateThumbnail(container.Key, file, "250", mimeType); err != nil {
+	if err := uploadAndGenerateThumbnail(&container, file, "250", mimeType); err != nil {
+		return nil, err
+	}
+
+	if err := _store.UpdateContainer(&container); err != nil {
 		return nil, err
 	}
 
@@ -155,16 +163,14 @@ func UpdateContainerFromFileUploadFromForm(form models.ContainerCreateUpdatePayl
 	//container.FileHash = fileHash
 	container.Empty = false
 	container.MimeType = mimeType
-	container.Height = 0
-	container.Width = 0
+
+	if err := uploadAndGenerateThumbnail(&container, file, "250", mimeType); err != nil {
+		return nil, err
+	}
 
 	log.Println(container)
 
 	if err := _store.UpdateContainer(&container); err != nil {
-		return nil, err
-	}
-
-	if err := uploadAndGenerateThumbnail(container.Key, file, "250", mimeType); err != nil {
 		return nil, err
 	}
 
@@ -198,8 +204,6 @@ func UpdateContainerFromFileUploadFromUrl(form models.ContainerCreateUpdatePaylo
 	container.FileHash = fileHash
 	container.Empty = false
 	container.MimeType = mimeType
-	container.Height = 0
-	container.Width = 0
 
 	file, fileSize, err := downloadFile(form.ContainerKey, form.DownloadUrl, form.Filename)
 	if err != nil {
@@ -210,11 +214,11 @@ func UpdateContainerFromFileUploadFromUrl(form models.ContainerCreateUpdatePaylo
 
 	container.FileSize = fileSize
 
-	if err := _store.UpdateContainer(&container); err != nil {
+	if err := uploadAndGenerateThumbnail(&container, file, "250", mimeType); err != nil {
 		return nil, err
 	}
 
-	if err := uploadAndGenerateThumbnail(container.Key, file, "250", mimeType); err != nil {
+	if err := _store.UpdateContainer(&container); err != nil {
 		return nil, err
 	}
 
@@ -281,6 +285,7 @@ func getFileHash(container_id string, filename string) string {
 }
 
 func getImageDimension(filePath string) (int, int) {
+	log.Println("Getting image dimensions for", filePath)
 	file, err := os.Open(filePath)
 	if err != nil {
 		return 0, 0
@@ -291,7 +296,7 @@ func getImageDimension(filePath string) (int, int) {
 		log.Println(err)
 	}
 
-	log.Println(image)
+	log.Println("image meta from file", image)
 	return image.Width, image.Height
 }
 
@@ -325,13 +330,9 @@ func downloadFile(container_id string, download_url string, filename string) (io
 	return resp.Body, resp.ContentLength, nil
 }
 
-func uploadAndGenerateThumbnail(container_key string, file io.Reader, size string, mimeType string) error {
-	container, err := _store.GetContainer(container_key)
-	if err != nil {
-		log.Println(err)
-	}
+func uploadAndGenerateThumbnail(container *models.Container, file io.Reader, size string, mimeType string) error {
 
-	containerFilePrefix := strings.ReplaceAll(container_key, "/", "-")
+	containerFilePrefix := strings.ReplaceAll(container.Key, "/", "-")
 
 	thumbPath := path.Join(previewTempDirectory, fmt.Sprintf("%s-preview.png", containerFilePrefix))
 	filePath := path.Join(previewTempDirectory, fmt.Sprintf("%s-%s", containerFilePrefix, container.Filename))
@@ -346,7 +347,7 @@ func uploadAndGenerateThumbnail(container_key string, file io.Reader, size strin
 		return err
 	}
 
-	log.Println(" Thumbnail has been requested for container: " + container_key)
+	log.Println(" Thumbnail has been requested for container: " + container.Key)
 
 	_, err = os.Stat(thumbPath)
 	if err != nil {
@@ -376,7 +377,8 @@ func uploadAndGenerateThumbnail(container_key string, file io.Reader, size strin
 			}
 
 			if _, err := os.Stat(thumbPath); err != nil {
-				return nil
+				log.Println("File missing from preview", err)
+				return err
 			}
 
 			if err := _storage.Upload(fmt.Sprintf("%s/preview.png", container.Key), thumbPath, "image/png"); err != nil {
@@ -389,10 +391,6 @@ func uploadAndGenerateThumbnail(container_key string, file io.Reader, size strin
 		width, height := getImageDimension(filePath)
 		container.Width = width
 		container.Height = height
-
-		if err := _store.UpdateContainer(&container); err != nil {
-			return err
-		}
 
 		err = os.Remove(thumbPath)
 
