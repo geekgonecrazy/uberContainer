@@ -51,6 +51,8 @@ func (m *mongoStore) CreateContainer(container *models.Container) error {
 
 	c := session.DB(m.DatabaseName).C("containers")
 
+	container.ID = bson.NewObjectId()
+
 	container.CreatedAt = time.Now()
 	container.ModifiedAt = time.Now()
 
